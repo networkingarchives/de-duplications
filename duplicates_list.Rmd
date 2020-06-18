@@ -1,5 +1,5 @@
 ---
-title: "R Notebook"
+title: "Letters to Remove List"
 output: html_notebook
 ---
 
@@ -24,6 +24,8 @@ colnames(work) = to_snake_case(colnames(work))
 
 ```
 
+## EMLO Recon Duplicates
+
 This first list of duplicates is from a list produced by EMLO recon matching tool. I make a network, assign each component an ID, and keep only one from each component. The downside is there's no choice over which to keep. 
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
@@ -32,10 +34,7 @@ matches = readxl::read_xlsx('EMLO_Matched_Works_2020.6.4.xlsx')
 
 emlo_dupes  = matches %>% select(2) %>% separate(1, into = c('X1','X2', 'X3','X4'))
 
-
-edgelistdupes =emlo_dupes %>% pivot_longer(names_to = 'match', values_to = 'id', cols = 2:4) %>% select(-match) %>% filter(!is.na(id))
-
-
+edgelistdupes = emlo_dupes %>% pivot_longer(names_to = 'match', values_to = 'id', cols = 2:4) %>% select(-match) %>% filter(!is.na(id))
 
 to_keep = edgelistdupes %>% graph_from_data_frame(directed = F) %>% as_tbl_graph() %>% mutate(comp= group_components(type = 'weak')) %>% activate(nodes) %>% as_tibble() %>% distinct(comp, .keep_all = T) %>% pull(name)
 
@@ -43,30 +42,35 @@ emlo_dupes_to_remove = c(emlo_dupes$X1, emlo_dupes$X2,emlo_dupes$X3, emlo_dupes$
   as_tibble() %>% 
   mutate(value = trimws(value)) %>% 
   filter(!is.na(value)) %>% distinct(value) %>% filter(! value %in% to_keep) %>% pull(value)
+
+emlo_dupes_to_check = c(emlo_dupes$X1, emlo_dupes$X2,emlo_dupes$X3, emlo_dupes$X4) %>% 
+  as_tibble() %>% 
+  mutate(value = trimws(value)) %>% 
+  filter(!is.na(value)) %>% distinct(value) %>% pull(value)
+
 ```
 
 
-This removes some records where the date, author, recipient and abstract are identical (and the abstract is more than 20 characters long)
-
+This lists all letters sent on the same day with the same sender and recipient, which are also _not_ in the same catalogue. See checks below: nearly all seem to be genuine duplicates, though there are some which are different versions of the same letter. 
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
-abstract_same_dupes = work %>% 
+
+
+possible_dupes = work %>% 
   filter(standard_gregorian_date>'1590-01-01') %>% 
   filter(standard_gregorian_date<'1720-01-01') %>%
-  group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id, abstract) %>% 
-  filter(!is.na(abstract)) %>%
-  filter(str_count(abstract) > 20) %>%
+  group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
   add_tally() %>% 
   filter(n!=1) %>% 
-  arrange(standard_gregorian_date) %>%
-  distinct(standard_gregorian_date, author_emlo_id, recipient_emlo_id, abstract, .keep_all = T) %>%  
+  filter(n<4) %>% 
+  group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
+  summarise(all_cats = paste0(original_catalogue_name, collapse = ';'), emlo_letter_id_number) %>% 
+  separate(all_cats, into = c('cat1', 'cat2', 'cat3', 'cat4'), sep = ';') %>% 
+  filter(cat1 != cat2) %>%
+  arrange(standard_gregorian_date) %>% 
   pull(emlo_letter_id_number)
-```
 
-This lists all letters sent on the same day between same pair, which are also not in the same catalogue.
-
-```{r message=FALSE, warning=FALSE, include=FALSE}
-possible_dupes = work %>% 
+possible_dupes_distinct_to_remove = work %>% 
   filter(standard_gregorian_date>'1590-01-01') %>% 
   filter(standard_gregorian_date<'1720-01-01') %>%
   filter(!emlo_letter_id_number %in% emlo_dupes_to_remove) %>% 
@@ -87,10 +91,9 @@ bcc_poss_dupes = work %>%
 
 ## Dummy catalogues
 
-Several catalogues are 'tests' and include unfinished or duplicated records. Probably best to leave out. 
+Several catalogues are 'tests' and include unfinished or duplicated records. For now, we remove letters from these catalogues.
 
 ```{r}
-
 
 test_cats = c('Test_Pennant (test)', 'TESTS_Bayle', 'Test_Metadata test', 'TEST_Newton', 'Coornhert, Dirck Volckertszoon (test)')
 
@@ -100,7 +103,7 @@ test_cat_letter_ids = work %>% filter(original_catalogue_name %in% test_cats) %>
 
 ## Optional step - Unknowns
 
-There are lots of 'unknown' authors and recipients. We could just remove these letters entirely because otherwise unknowns may be inaccurately collapsed into the same person, affecting metrics. 
+There are lots of 'unknown' authors and recipients. We _could_ just remove these letters entirely because otherwise unknowns may be inaccurately collapsed into the same person, affecting metrics. We produce a second version of the 'to remove' list, with these unknowns added.
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 # First a list of IDs used for unknown senders or recipients to filter out:
@@ -120,9 +123,10 @@ unknown_letters = work %>% filter(author_emlo_id %in% unknowns | recipient_emlo_
 
 ```
 
-Create full list to be removed
+## Create full list to be removed
 
-With unknowns:
+Create a text file with one record to be removed per line. This first includes all emlo recon duplicates, all posible duplicates based on identical date, sender and recipient, all with an unknown/unidentified sender or recipient, and all letters in test catalogues.
+
 
 ```{r}
 c(emlo_dupes_to_remove, abstract_same_dupes, possible_dupes, test_cat_letter_ids,unknown_letters) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list_with_unknown.csv')
@@ -134,3 +138,75 @@ Without unknowns:
 c(emlo_dupes_to_remove, abstract_same_dupes, possible_dupes, test_cat_letter_ids) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list.csv')
 ```
 
+Create a version of the work.csv with duplicates (only those I found, not including EMLO recon duplicates) for sorting and checking.
+
+```{r}
+work %>% 
+  mutate(poss_dupe = ifelse(emlo_letter_id_number %in% emlo_dupes_to_check, 'no', ifelse(emlo_letter_id_number %in% possible_dupes, 'yes', 'no'))) %>% arrange(standard_gregorian_date, author, recipient) %>%  mutate(order = 1:nrow(.)) %>% select(order, everything()) %>%
+  write_csv('work_with_poss_dupes.csv', na = '')
+```
+
+## Some checks:
+
+http://emlo.bodleian.ox.ac.uk/profile/work/28b28649-cf73-4cd5-b6bd-3633e9507557
+http://emlo.bodleian.ox.ac.uk/profile/work/b5b49138-233b-420c-8739-f9390a6f4e9c
+
+Same content (used Google translate on the latin transcription and compared to the Bodleian abstract)
+http://emlo.bodleian.ox.ac.uk/profile/work/b725d029-4968-4015-8b9c-152d5df77a18
+http://emlo.bodleian.ox.ac.uk/profile/work/5925b225-601c-444e-89cf-f39278c951a2
+
+Same shelfmark:
+http://emlo.bodleian.ox.ac.uk/profile/work/3389edaf-8810-4b84-863f-1121c79aa5c6
+http://emlo.bodleian.ox.ac.uk/profile/work/1f182425-aeba-4d53-9588-ef251bf4f5a8
+
+
+Between Peiresc and Dupuy:
+http://emlo.bodleian.ox.ac.uk/profile/work/479c6266-43cb-4ed3-af47-21e185b1401a
+http://emlo.bodleian.ox.ac.uk/profile/work/a348c752-9ace-4e1c-b1d3-3f1d041fd993
+
+This may not be a duplicate? 
+Vossius, Gerardus Joannes
+Pontanus, Johannes Isacius
+http://emlo.bodleian.ox.ac.uk/profile/work/df297979-1ba0-4d4d-9135-2126d3fe78c3
+http://emlo.bodleian.ox.ac.uk/profile/work/7294fe80-69aa-4b0c-97c3-aef5db70d3ec
+
+Rubens, Peter Paul
+Peiresc, Nicolas-Claude Fabri de
+http://emlo.bodleian.ox.ac.uk/profile/work/82ac3d43-45e6-45ab-8fea-52cca2d5f34d
+http://emlo.bodleian.ox.ac.uk/profile/work/3aa2b609-cfc2-4cdf-b54d-2e3e3a7a736f
+
+Sometimes they are similar but different transcriptions/letters:
+http://ckcc.huygens.knaw.nl/epistolarium/letter.html?id=huyg001/0263
+http://ckcc.huygens.knaw.nl/epistolarium/letter.html?id=barl001/0019
+
+Ussher letters - matches one of the manuscript copies
+http://emlo.bodleian.ox.ac.uk/profile/work/eb3df7ee-6f5f-4681-9127-d7e1147a16df
+http://emlo.bodleian.ox.ac.uk/profile/work/ee479540-da0c-4f12-840a-0650e21c5491
+
+Same letter between Pascal and Christ. Huygens:
+http://ckcc.huygens.knaw.nl/epistolarium/letter.html?id=huyg003/0562
+https://gallica.bnf.fr/ark:/12148/bpt6k69975r/f284.image
+
+These two go to the same transcription of a letter from Christ. Huygens to Dirck van Nierop
+http://emlo.bodleian.ox.ac.uk/profile/work/e9be3850-23bc-45c6-9e99-fed34eaa640d
+http://emlo.bodleian.ox.ac.uk/profile/work/1ef41629-117d-4dee-a2d3-2ad3e3207537
+
+This one is the same part of a letter by Oldenburg quoted in a letter from Boyle:
+http://emlo.bodleian.ox.ac.uk/profile/work/da9a9bd3-337e-4efe-acf5-de8d89acfe48
+http://emlo.bodleian.ox.ac.uk/profile/work/d26367c2-b17f-4733-83d2-b4cbf31f763a
+
+I have spotted one or two where they match because the date is non-specific but it has been filled in the 'standard gregorian date' field:
+For example the below, first is marked as 'Early April' but '1659-04-30' in the standard date field and so it's a false duplicate.
+
+http://emlo.bodleian.ox.ac.uk/profile/work/2735e4b4-a95a-48a2-b507-cc220fef02f2
+http://emlo.bodleian.ox.ac.uk/profile/work/ba6474d3-a66b-459e-8736-29dc6c2475cb
+
+Most of the duplicates are either 
+
+Ussher printed edition - BCC
+De Groot - Vossius catalogue
+Vossius - BCC
+Some Peiresc - Rubens
+Some Huygens - Nierop
+
+This may
