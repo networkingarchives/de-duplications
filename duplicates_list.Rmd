@@ -1,0 +1,136 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(tidygraph)
+library(igraph)
+library(DT)
+library(ggraph)
+library(snakecase)
+library(kableExtra)
+library(cowplot)
+
+location <- read_csv("~/Downloads/EMLO/location.csv", col_types = cols(.default = "c"))
+person <- read_csv("~/Downloads/EMLO/person.csv", col_types = cols(.default = "c"))
+work <- read_csv("~/Downloads/EMLO/work.csv", col_types = cols(.default = "c"))
+
+colnames(location) = to_snake_case(colnames(location))
+colnames(person) = to_snake_case(colnames(person))
+colnames(work) = to_snake_case(colnames(work))
+
+```
+
+This first list of duplicates is from a list produced by EMLO recon matching tool. I make a network, assign each component an ID, and keep only one from each component. The downside is there's no choice over which to keep. 
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+matches = readxl::read_xlsx('EMLO_Matched_Works_2020.6.4.xlsx')
+
+emlo_dupes  = matches %>% select(2) %>% separate(1, into = c('X1','X2', 'X3','X4'))
+
+
+edgelistdupes =emlo_dupes %>% pivot_longer(names_to = 'match', values_to = 'id', cols = 2:4) %>% select(-match) %>% filter(!is.na(id))
+
+
+
+to_keep = edgelistdupes %>% graph_from_data_frame(directed = F) %>% as_tbl_graph() %>% mutate(comp= group_components(type = 'weak')) %>% activate(nodes) %>% as_tibble() %>% distinct(comp, .keep_all = T) %>% pull(name)
+
+emlo_dupes_to_remove = c(emlo_dupes$X1, emlo_dupes$X2,emlo_dupes$X3, emlo_dupes$X4) %>% 
+  as_tibble() %>% 
+  mutate(value = trimws(value)) %>% 
+  filter(!is.na(value)) %>% distinct(value) %>% filter(! value %in% to_keep) %>% pull(value)
+```
+
+
+This removes some records where the date, author, recipient and abstract are identical (and the abstract is more than 20 characters long)
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+abstract_same_dupes = work %>% 
+  filter(standard_gregorian_date>'1590-01-01') %>% 
+  filter(standard_gregorian_date<'1720-01-01') %>%
+  group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id, abstract) %>% 
+  filter(!is.na(abstract)) %>%
+  filter(str_count(abstract) > 20) %>%
+  add_tally() %>% 
+  filter(n!=1) %>% 
+  arrange(standard_gregorian_date) %>%
+  distinct(standard_gregorian_date, author_emlo_id, recipient_emlo_id, abstract, .keep_all = T) %>%  
+  pull(emlo_letter_id_number)
+```
+
+This lists all letters sent on the same day between same pair, which are also not in the same catalogue.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+possible_dupes = work %>% 
+  filter(standard_gregorian_date>'1590-01-01') %>% 
+  filter(standard_gregorian_date<'1720-01-01') %>%
+  filter(!emlo_letter_id_number %in% emlo_dupes_to_remove) %>% 
+  filter(!emlo_letter_id_number %in% abstract_same_dupes)%>%
+  group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
+  add_tally() %>% 
+  filter(n!=1) %>% 
+  filter(n<4) %>% group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
+  summarise(all_cats = paste0(original_catalogue_name, collapse = ';'), emlo_letter_id_number) %>% separate(all_cats, into = c('cat1', 'cat2', 'cat3', 'cat4'), sep = ';') %>% filter(cat1 != cat2) %>%
+  arrange(standard_gregorian_date) %>% 
+  distinct(author_emlo_id, recipient_emlo_id, standard_gregorian_date, .keep_all = T) %>% 
+  pull(emlo_letter_id_number)
+
+bcc_poss_dupes = work %>% 
+  filter(emlo_letter_id_number %in% possible_dupes) %>% 
+  filter(original_catalogue_name == 'Bodleian card catalogue') %>% pull(emlo_letter_id_number)
+```
+
+## Dummy catalogues
+
+Several catalogues are 'tests' and include unfinished or duplicated records. Probably best to leave out. 
+
+```{r}
+
+
+test_cats = c('Test_Pennant (test)', 'TESTS_Bayle', 'Test_Metadata test', 'TEST_Newton', 'Coornhert, Dirck Volckertszoon (test)')
+
+test_cat_letter_ids = work %>% filter(original_catalogue_name %in% test_cats) %>% pull(emlo_letter_id_number)
+
+```
+
+## Optional step - Unknowns
+
+There are lots of 'unknown' authors and recipients. We could just remove these letters entirely because otherwise unknowns may be inaccurately collapsed into the same person, affecting metrics. 
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# First a list of IDs used for unknown senders or recipients to filter out:
+unknowns = c('903934','23155', '6854', '853', '923980', '270', '300827', '901925', '906141')
+
+# Next, a list of other IDs marked with either unknown or unidentified. Not necessarily to be taken out but could be split?
+
+# unknown_list = person %>% 
+#   filter(str_detect(person_primary_name_in_emlo,'(?i)unknown') |str_detect(person_primary_name_in_emlo,'(?i)unidentified') ) %>% pull(emlo_person_id)
+# 
+# unknowns = c(unknowns,unknown_list)
+
+# Add letter IDs to a list where either sender or receiver are in these unknowns:
+
+unknown_letters = work %>% filter(author_emlo_id %in% unknowns | recipient_emlo_id %in% unknowns) %>% pull(emlo_letter_id_number)
+
+
+```
+
+Create full list to be removed
+
+With unknowns:
+
+```{r}
+c(emlo_dupes_to_remove, abstract_same_dupes, possible_dupes, test_cat_letter_ids,unknown_letters) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list_with_unknown.csv')
+```
+
+Without unknowns:
+
+```{r}
+c(emlo_dupes_to_remove, abstract_same_dupes, possible_dupes, test_cat_letter_ids) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list.csv')
+```
+
