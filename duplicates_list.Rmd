@@ -26,7 +26,7 @@ colnames(work) = to_snake_case(colnames(work))
 
 ## EMLO Recon Duplicates
 
-This first list of duplicates is from a list produced by EMLO recon matching tool. I make a network, assign each component an ID, and keep only one from each component. The downside is there's no choice over which to keep. 
+This first list of duplicates is from a list produced by EMLO recon matching tool. I make a network, assign each component an ID, and keep only one from each component. The downside is there's no choice over which to keep.  
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 
@@ -127,7 +127,6 @@ unknown_letters = work %>% filter(author_emlo_id %in% unknowns | recipient_emlo_
 
 Create a text file with one record to be removed per line. This first includes all emlo recon duplicates, all posible duplicates based on identical date, sender and recipient, all with an unknown/unidentified sender or recipient, and all letters in test catalogues.
 
-
 ```{r}
 c(emlo_dupes_to_remove, abstract_same_dupes, possible_dupes, test_cat_letter_ids,unknown_letters) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list_with_unknown.csv')
 ```
@@ -135,7 +134,10 @@ c(emlo_dupes_to_remove, abstract_same_dupes, possible_dupes, test_cat_letter_ids
 Without unknowns:
 
 ```{r}
-c(emlo_dupes_to_remove, abstract_same_dupes, possible_dupes, test_cat_letter_ids) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list.csv')
+c(emlo_dupes_to_remove, abstract_same_dupes, possible_dupes, test_cat_letter_ids) %>% 
+  as_tibble() %>% 
+  distinct(value) %>% 
+  write_csv('to_remove_list.csv')
 ```
 
 Create a version of the work.csv with duplicates (only those I found, not including EMLO recon duplicates) for sorting and checking.
