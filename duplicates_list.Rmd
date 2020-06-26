@@ -74,12 +74,13 @@ possible_dupes_distinct_to_remove = work %>%
   filter(standard_gregorian_date>'1590-01-01') %>% 
   filter(standard_gregorian_date<'1720-01-01') %>%
   filter(!emlo_letter_id_number %in% emlo_dupes_to_remove) %>% 
-  filter(!emlo_letter_id_number %in% abstract_same_dupes)%>%
   group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
   add_tally() %>% 
   filter(n!=1) %>% 
-  filter(n<4) %>% group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
-  summarise(all_cats = paste0(original_catalogue_name, collapse = ';'), emlo_letter_id_number) %>% separate(all_cats, into = c('cat1', 'cat2', 'cat3', 'cat4'), sep = ';') %>% filter(cat1 != cat2) %>%
+  filter(n<4) %>% 
+  group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
+  summarise(all_cats = paste0(original_catalogue_name, collapse = ';'), emlo_letter_id_number) %>% separate(all_cats, into = c('cat1', 'cat2', 'cat3', 'cat4'), sep = ';') %>% 
+  filter(cat1 != cat2) %>%
   arrange(standard_gregorian_date) %>% 
   distinct(author_emlo_id, recipient_emlo_id, standard_gregorian_date, .keep_all = T) %>% 
   pull(emlo_letter_id_number)
@@ -128,16 +129,28 @@ unknown_letters = work %>% filter(author_emlo_id %in% unknowns | recipient_emlo_
 Create a text file with one record to be removed per line. This first includes all emlo recon duplicates, all posible duplicates based on identical date, sender and recipient, all with an unknown/unidentified sender or recipient, and all letters in test catalogues.
 
 ```{r}
-c(emlo_dupes_to_remove, abstract_same_dupes, possible_dupes, test_cat_letter_ids,unknown_letters) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list_with_unknown.csv')
+c(emlo_dupes_to_remove, possible_dupes, test_cat_letter_ids,unknown_letters) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list_with_unknown.csv')
 ```
 
 Without unknowns:
 
 ```{r}
-c(emlo_dupes_to_remove, abstract_same_dupes, possible_dupes, test_cat_letter_ids) %>% 
-  as_tibble() %>% 
-  distinct(value) %>% 
-  write_csv('to_remove_list.csv')
+# load existing list. Check if changes. If there are, make a copy and put in archive folder with date.
+
+old_to_remove = read_csv('to_remove_list.csv') %>% pull(value)
+
+new_to_remove = as.character(c(emlo_dupes_to_remove,  possible_dupes_distinct_to_remove, test_cat_letter_ids))
+
+if(!identical(new_to_remove, old_to_remove)){
+  
+  old_to_remove %>% 
+  as_tibble() %>% write_csv(paste0('archive/to_remove_list', "_", Sys.Date(), ".csv"))
+  
+  new_to_remove %>% 
+  as_tibble() %>% write_csv('to_remove_list.csv')
+}
+
+
 ```
 
 Create a version of the work.csv with duplicates (only those I found, not including EMLO recon duplicates) for sorting and checking.
