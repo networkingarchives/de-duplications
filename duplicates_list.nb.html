@@ -242,6 +242,12 @@ test_cat_letter_ids = work %&gt;% filter(original_catalogue_name %in% test_cats)
 <h2>Letters to delete</h2>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxudG9fZGVsZXRlID0gb3Blbnhsc3g6OnJlYWQueGxzeCgnRU1MT19MZXR0ZXJzTWFya2VkVG9EZWxldGVfMjAyMS41LjI0Lnhsc3gnKVxuY29sbmFtZXModG9fZGVsZXRlKSA9IHRvX3NuYWtlX2Nhc2UoY29sbmFtZXModG9fZGVsZXRlKSlcblxubGV0dGVyc19tYXJrZWRfdG9fZGVsZXRlID0gdG9fZGVsZXRlICU+JSBwdWxsKGVtbG9fd29ya19sZXR0ZXJfaWQpXG5gYGAifQ== -->
+<pre class="r"><code>to_delete = openxlsx::read.xlsx(&#39;EMLO_LettersMarkedToDelete_2021.5.24.xlsx&#39;)
+colnames(to_delete) = to_snake_case(colnames(to_delete))
+
+letters_marked_to_delete = to_delete %&gt;% pull(emlo_work_letter_id)</code></pre>
+<!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 </div>
@@ -256,27 +262,28 @@ test_cat_letter_ids = work %&gt;% filter(original_catalogue_name %in% test_cats)
 <p>Create a text file with one record to be removed per line. This first includes all emlo recon duplicates, all possible duplicates based on identical date, sender and recipient, all with an unknown/unidentified sender or recipient, and all letters in test catalogues.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYyhlbWxvX2R1cGVzX3RvX3JlbW92ZSwgcG9zc2libGVfZHVwZXMsIHRlc3RfY2F0X2xldHRlcl9pZHMsdW5rbm93bl9sZXR0ZXJzKSAlPiUgYXNfdGliYmxlKCkgJT4lIGRpc3RpbmN0KHZhbHVlKSAlPiUgd3JpdGVfY3N2KCd0b19yZW1vdmVfbGlzdF93aXRoX3Vua25vd24uY3N2JylcbmBgYCJ9 -->
-<pre class="r"><code>c(emlo_dupes_to_remove, possible_dupes, test_cat_letter_ids,unknown_letters) %&gt;% as_tibble() %&gt;% distinct(value) %&gt;% write_csv(&#39;to_remove_list_with_unknown.csv&#39;)</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYyhlbWxvX2R1cGVzX3RvX3JlbW92ZSwgcG9zc2libGVfZHVwZXMsIHRlc3RfY2F0X2xldHRlcl9pZHMsdW5rbm93bl9sZXR0ZXJzLGxldHRlcnNfbWFya2VkX3RvX2RlbGV0ZSkgJT4lIGFzX3RpYmJsZSgpICU+JSBkaXN0aW5jdCh2YWx1ZSkgJT4lIHdyaXRlX2NzdigndG9fcmVtb3ZlX2xpc3Rfd2l0aF91bmtub3duLmNzdicpXG5gYGAifQ== -->
+<pre class="r"><code>c(emlo_dupes_to_remove, possible_dupes, test_cat_letter_ids,unknown_letters,letters_marked_to_delete) %&gt;% as_tibble() %&gt;% distinct(value) %&gt;% write_csv(&#39;to_remove_list_with_unknown.csv&#39;)</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>Without unknowns:</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBsb2FkIGV4aXN0aW5nIGxpc3QuIENoZWNrIGlmIGNoYW5nZXMuIElmIHRoZXJlIGFyZSwgbWFrZSBhIGNvcHkgYW5kIHB1dCBpbiBhcmNoaXZlIGZvbGRlciB3aXRoIGRhdGVcblxub2xkX3RvX3JlbW92ZSA9IHJlYWRfY3N2KCd0b19yZW1vdmVfbGlzdC5jc3YnKSAlPiUgcHVsbCh2YWx1ZSlcbmBgYCJ9 -->
-<pre class="r"><code># load existing list. Check if changes. If there are, make a copy and put in archive folder with date
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBsb2FkIGV4aXN0aW5nIGxpc3QuIENoZWNrIGlmIGNoYW5nZXMuIElmIHRoZXJlIGFyZSwgbWFrZSBhIGNvcHkgYW5kIHB1dCBpbiBhcmNoaXZlIGZvbGRlciB3aXRoIGRhdGUuXG5cbm9sZF90b19yZW1vdmUgPSByZWFkX2NzdigndG9fcmVtb3ZlX2xpc3QuY3N2JykgJT4lIHB1bGwodmFsdWUpXG5gYGAifQ== -->
+<pre class="r"><code># load existing list. Check if changes. If there are, make a copy and put in archive folder with date.
 
 old_to_remove = read_csv(&#39;to_remove_list.csv&#39;) %&gt;% pull(value)</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiUGFyc2VkIHdpdGggY29sdW1uIHNwZWNpZmljYXRpb246XG5jb2xzKFxuICB2YWx1ZSA9IGNvbF9kb3VibGUoKVxuKVxuIn0= -->
-<pre><code>Parsed with column specification:
+<!-- rnb-output-begin eyJkYXRhIjoiXG7ilIDilIAgQ29sdW1uIHNwZWNpZmljYXRpb24g4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSAXG5jb2xzKFxuICB2YWx1ZSA9IGNvbF9kb3VibGUoKVxuKVxuIn0= -->
+<pre><code>
+── Column specification ────────────────────────────────────────────────────────────────────────────────
 cols(
   value = col_double()
 )</code></pre>
 <!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubmV3X3RvX3JlbW92ZSA9IGFzLmNoYXJhY3RlcihjKGVtbG9fZHVwZXNfdG9fcmVtb3ZlLCAgcG9zc2libGVfZHVwZXNfZGlzdGluY3RfdG9fcmVtb3ZlLCB0ZXN0X2NhdF9sZXR0ZXJfaWRzKSlcblxuaWYoIWlkZW50aWNhbChuZXdfdG9fcmVtb3ZlLCBvbGRfdG9fcmVtb3ZlKSl7XG4gIFxuICBvbGRfdG9fcmVtb3ZlICU+JSBcbiAgYXNfdGliYmxlKCkgJT4lIHdyaXRlX2NzdihwYXN0ZTAoJ2FyY2hpdmUvdG9fcmVtb3ZlX2xpc3QnLCBcIl9cIiwgU3lzLkRhdGUoKSwgXCIuY3N2XCIpKVxuICBcbiAgbmV3X3RvX3JlbW92ZSAlPiUgXG4gIGFzX3RpYmJsZSgpICU+JSB3cml0ZV9jc3YoJ3RvX3JlbW92ZV9saXN0LmNzdicpXG59XG5cblxuYGBgIn0= -->
-<pre class="r"><code>new_to_remove = as.character(c(emlo_dupes_to_remove,  possible_dupes_distinct_to_remove, test_cat_letter_ids))
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubmV3X3RvX3JlbW92ZSA9IGFzLmNoYXJhY3RlcihjKGVtbG9fZHVwZXNfdG9fcmVtb3ZlLCAgcG9zc2libGVfZHVwZXNfZGlzdGluY3RfdG9fcmVtb3ZlLCB0ZXN0X2NhdF9sZXR0ZXJfaWRzLGxldHRlcnNfbWFya2VkX3RvX2RlbGV0ZSkpXG5cbmlmKCFpZGVudGljYWwobmV3X3RvX3JlbW92ZSwgb2xkX3RvX3JlbW92ZSkpe1xuICBcbiAgb2xkX3RvX3JlbW92ZSAlPiUgXG4gIGFzX3RpYmJsZSgpICU+JSB3cml0ZV9jc3YocGFzdGUwKCdhcmNoaXZlL3RvX3JlbW92ZV9saXN0JywgXCJfXCIsIFN5cy5EYXRlKCksIFwiLmNzdlwiKSlcbiAgXG4gIG5ld190b19yZW1vdmUgJT4lIFxuICBhc190aWJibGUoKSAlPiUgd3JpdGVfY3N2KCd0b19yZW1vdmVfbGlzdC5jc3YnKVxufVxuXG5cbmBgYCJ9 -->
+<pre class="r"><code>new_to_remove = as.character(c(emlo_dupes_to_remove,  possible_dupes_distinct_to_remove, test_cat_letter_ids,letters_marked_to_delete))
 
 if(!identical(new_to_remove, old_to_remove)){
   
