@@ -55,14 +55,13 @@ This lists all letters sent on the same day with the same sender and recipient, 
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 
-
 possible_dupes = work %>% 
   filter(standard_gregorian_date>'1590-01-01') %>% 
   filter(standard_gregorian_date<'1720-01-01') %>%
   group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
   add_tally() %>% 
   filter(n!=1) %>% 
-  filter(n<4) %>% 
+  filter(n<5) %>% 
   group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
   summarise(all_cats = paste0(original_catalogue_name, collapse = ';'), emlo_letter_id_number) %>% 
   separate(all_cats, into = c('cat1', 'cat2', 'cat3', 'cat4'), sep = ';') %>% 
@@ -102,6 +101,16 @@ test_cat_letter_ids = work %>% filter(original_catalogue_name %in% test_cats) %>
 
 ```
 
+## Letters to delete
+
+```{r}
+to_delete = openxlsx::read.xlsx('EMLO_LettersMarkedToDelete_2021.5.24.xlsx')
+colnames(to_delete) = to_snake_case(colnames(to_delete))
+
+letters_marked_to_delete = to_delete %>% pull(emlo_work_letter_id)
+```
+
+
 ## Optional step - Unknowns
 
 There are lots of 'unknown' authors and recipients. We _could_ just remove these letters entirely because otherwise unknowns may be inaccurately collapsed into the same person, affecting metrics. We produce a second version of the 'to remove' list, with these unknowns added.
@@ -126,10 +135,10 @@ unknown_letters = work %>% filter(author_emlo_id %in% unknowns | recipient_emlo_
 
 ## Create full list to be removed
 
-Create a text file with one record to be removed per line. This first includes all emlo recon duplicates, all posible duplicates based on identical date, sender and recipient, all with an unknown/unidentified sender or recipient, and all letters in test catalogues.
+Create a text file with one record to be removed per line. This first includes all emlo recon duplicates, all possible duplicates based on identical date, sender and recipient, all with an unknown/unidentified sender or recipient, and all letters in test catalogues.
 
 ```{r}
-c(emlo_dupes_to_remove, possible_dupes, test_cat_letter_ids,unknown_letters) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list_with_unknown.csv')
+c(emlo_dupes_to_remove, possible_dupes, test_cat_letter_ids,unknown_letters,letters_marked_to_delete) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list_with_unknown.csv')
 ```
 
 Without unknowns:
@@ -139,7 +148,7 @@ Without unknowns:
 
 old_to_remove = read_csv('to_remove_list.csv') %>% pull(value)
 
-new_to_remove = as.character(c(emlo_dupes_to_remove,  possible_dupes_distinct_to_remove, test_cat_letter_ids))
+new_to_remove = as.character(c(emlo_dupes_to_remove,  possible_dupes_distinct_to_remove, test_cat_letter_ids,letters_marked_to_delete))
 
 if(!identical(new_to_remove, old_to_remove)){
   
