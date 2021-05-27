@@ -41,12 +41,12 @@ to_keep = edgelistdupes %>% graph_from_data_frame(directed = F) %>% as_tbl_graph
 emlo_dupes_to_remove = c(emlo_dupes$X1, emlo_dupes$X2,emlo_dupes$X3, emlo_dupes$X4) %>% 
   as_tibble() %>% 
   mutate(value = trimws(value)) %>% 
-  filter(!is.na(value)) %>% distinct(value) %>% filter(! value %in% to_keep) %>% pull(value)
+  filter(!is.na(value)) %>% distinct(value) %>% filter(! value %in% to_keep) %>% mutate(reason = 'from_emlo_matches')
 
 emlo_dupes_to_check = c(emlo_dupes$X1, emlo_dupes$X2,emlo_dupes$X3, emlo_dupes$X4) %>% 
   as_tibble() %>% 
   mutate(value = trimws(value)) %>% 
-  filter(!is.na(value)) %>% distinct(value) %>% pull(value)
+  filter(!is.na(value)) %>% distinct(value) 
 
 ```
 
@@ -66,8 +66,8 @@ possible_dupes = work %>%
   summarise(all_cats = paste0(original_catalogue_name, collapse = ';'), emlo_letter_id_number) %>% 
   separate(all_cats, into = c('cat1', 'cat2', 'cat3', 'cat4'), sep = ';') %>% 
   filter(cat1 != cat2) %>%
-  arrange(standard_gregorian_date) %>% 
-  pull(emlo_letter_id_number)
+  arrange(standard_gregorian_date) %>% ungroup() %>% 
+  distinct(emlo_letter_id_number)%>% mutate(reason = 'auto_duplicate')
 
 possible_dupes_distinct_to_remove = work %>% 
   filter(standard_gregorian_date>'1590-01-01') %>% 
@@ -97,7 +97,8 @@ Several catalogues are 'tests' and include unfinished or duplicated records. For
 
 test_cats = c('Test_Pennant (test)', 'TESTS_Bayle', 'Test_Metadata test', 'TEST_Newton', 'Coornhert, Dirck Volckertszoon (test)')
 
-test_cat_letter_ids = work %>% filter(original_catalogue_name %in% test_cats) %>% pull(emlo_letter_id_number)
+test_cat_letter_ids = work %>% filter(original_catalogue_name %in% test_cats) %>% 
+  distinct(emlo_letter_id_number) %>% mutate(reason = 'test_catalogue')
 
 ```
 
@@ -107,7 +108,7 @@ test_cat_letter_ids = work %>% filter(original_catalogue_name %in% test_cats) %>
 to_delete = openxlsx::read.xlsx('EMLO_LettersMarkedToDelete_2021.5.24.xlsx')
 colnames(to_delete) = to_snake_case(colnames(to_delete))
 
-letters_marked_to_delete = to_delete %>% pull(emlo_work_letter_id)
+letters_marked_to_delete = to_delete %>% distinct(emlo_work_letter_id)%>% mutate(reason = 'marked_to_delete')
 ```
 
 
@@ -128,7 +129,7 @@ unknowns = c('903934','23155', '6854', '853', '923980', '270', '300827', '901925
 
 # Add letter IDs to a list where either sender or receiver are in these unknowns:
 
-unknown_letters = work %>% filter(author_emlo_id %in% unknowns | recipient_emlo_id %in% unknowns) %>% pull(emlo_letter_id_number)
+unknown_letters = work %>% filter(author_emlo_id %in% unknowns | recipient_emlo_id %in% unknowns) %>% distinct(emlo_letter_id_number) %>% mutate(reason = 'author_or_recipient_unknown')
 
 
 ```
@@ -138,7 +139,7 @@ unknown_letters = work %>% filter(author_emlo_id %in% unknowns | recipient_emlo_
 Create a text file with one record to be removed per line. This first includes all emlo recon duplicates, all possible duplicates based on identical date, sender and recipient, all with an unknown/unidentified sender or recipient, and all letters in test catalogues.
 
 ```{r}
-c(emlo_dupes_to_remove, possible_dupes, test_cat_letter_ids,unknown_letters,letters_marked_to_delete) %>% as_tibble() %>% distinct(value) %>% write_csv('to_remove_list_with_unknown.csv')
+rbind(emlo_dupes_to_remove, possible_dupes %>% rename(value = emlo_letter_id_number), test_cat_letter_ids%>% rename(value = emlo_letter_id_number),unknown_letters%>% rename(value = emlo_letter_id_number),letters_marked_to_delete%>% rename(value = emlo_work_letter_id))%>% distinct(value, reason) %>% write_csv('to_remove_list_with_unknown.csv')
 ```
 
 Without unknowns:
@@ -148,7 +149,7 @@ Without unknowns:
 
 old_to_remove = read_csv('to_remove_list.csv') %>% pull(value)
 
-new_to_remove = as.character(c(emlo_dupes_to_remove,  possible_dupes_distinct_to_remove, test_cat_letter_ids,letters_marked_to_delete))
+new_to_remove = rbind(emlo_dupes_to_remove, possible_dupes %>% rename(value = emlo_letter_id_number), test_cat_letter_ids%>% rename(value = emlo_letter_id_number),letters_marked_to_delete%>% rename(value = emlo_work_letter_id))%>% distinct(value, .keep_all = T)
 
 if(!identical(new_to_remove, old_to_remove)){
   
@@ -161,6 +162,7 @@ if(!identical(new_to_remove, old_to_remove)){
 
 
 ```
+
 
 Create a version of the work.csv with duplicates (only those I found, not including EMLO recon duplicates) for sorting and checking.
 
