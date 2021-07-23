@@ -30,7 +30,7 @@ This first list of duplicates is from a list produced by EMLO recon matching too
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 
-matches = readxl::read_xlsx('EMLO_Matched_Works_2020.6.4.xlsx')
+matches = readxl::read_xlsx('EMLO_Matches_2021.7.22a.xlsx')
 
 emlo_dupes  = matches %>% select(2) %>% separate(1, into = c('X1','X2', 'X3','X4'))
 
@@ -52,11 +52,35 @@ emlo_dupes_to_check = c(emlo_dupes$X1, emlo_dupes$X2,emlo_dupes$X3, emlo_dupes$X
 ```
 
 
+
+## Dummy catalogues
+
+Several catalogues are 'tests' and include unfinished or duplicated records. For now, we remove letters from these catalogues.
+
+```{r}
+
+test_cats = c('Test_Pennant (test)', 'TESTS_Bayle', 'Test_Metadata test', 'TEST_Newton', 'Coornhert, Dirck Volckertszoon (test)')
+
+test_cat_letter_ids = work %>% filter(original_catalogue_name %in% test_cats) %>% 
+  distinct(emlo_letter_id_number) %>% mutate(reason = 'test_catalogue')
+
+```
+
+## Letters to delete
+
+```{r}
+to_delete = openxlsx::read.xlsx('EMLO_LettersMarkedToDelete_2021.5.24.xlsx')
+colnames(to_delete) = to_snake_case(colnames(to_delete))
+
+letters_marked_to_delete = to_delete %>% distinct(emlo_work_letter_id)%>% mutate(reason = 'marked_to_delete')
+```
+
+
 This lists all letters sent on the same day with the same sender and recipient, which are also _not_ in the same catalogue. See checks below: nearly all seem to be genuine duplicates, though there are some which are different versions of the same letter. 
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 
-possible_dupes = work %>% 
+possible_dupes = work %>% filter(!emlo_letter_id_number %in%emlo_dupes_to_remove$value ) %>% filter(!emlo_letter_id_number %in% letters_marked_to_delete$emlo_work_letter_id) %>% filter(!emlo_letter_id_number %in% test_cat_letter_ids$emlo_letter_id_number) %>% 
   filter(standard_gregorian_date>'1590-01-01') %>% 
   filter(standard_gregorian_date<'1720-01-01') %>%
   group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
@@ -88,28 +112,6 @@ possible_dupes_distinct_to_remove = work %>%
 bcc_poss_dupes = work %>% 
   filter(emlo_letter_id_number %in% possible_dupes) %>% 
   filter(original_catalogue_name == 'Bodleian card catalogue') %>% pull(emlo_letter_id_number)
-```
-
-## Dummy catalogues
-
-Several catalogues are 'tests' and include unfinished or duplicated records. For now, we remove letters from these catalogues.
-
-```{r}
-
-test_cats = c('Test_Pennant (test)', 'TESTS_Bayle', 'Test_Metadata test', 'TEST_Newton', 'Coornhert, Dirck Volckertszoon (test)')
-
-test_cat_letter_ids = work %>% filter(original_catalogue_name %in% test_cats) %>% 
-  distinct(emlo_letter_id_number) %>% mutate(reason = 'test_catalogue')
-
-```
-
-## Letters to delete
-
-```{r}
-to_delete = openxlsx::read.xlsx('EMLO_LettersMarkedToDelete_2021.5.24.xlsx')
-colnames(to_delete) = to_snake_case(colnames(to_delete))
-
-letters_marked_to_delete = to_delete %>% distinct(emlo_work_letter_id)%>% mutate(reason = 'marked_to_delete')
 ```
 
 
