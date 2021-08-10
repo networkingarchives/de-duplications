@@ -36,13 +36,21 @@ emlo_dupes  = matches %>% select(2) %>% separate(1, into = c('X1','X2', 'X3','X4
 
 edgelistdupes = emlo_dupes %>% pivot_longer(names_to = 'match', values_to = 'id', cols = 2:4) %>% select(-match) %>% filter(!is.na(id))
 
-to_keep = edgelistdupes %>% graph_from_data_frame(directed = F) %>% as_tbl_graph() %>% mutate(comp= group_components(type = 'weak')) %>% activate(nodes) %>% as_tibble() %>% distinct(comp, .keep_all = T) %>% pull(name)
+to_keep = edgelistdupes %>% 
+  graph_from_data_frame(directed = F) %>% 
+  as_tbl_graph() %>% 
+  mutate(comp= group_components(type = 'weak')) %>% 
+  activate(nodes) %>% 
+  as_tibble() %>% 
+  distinct(comp, .keep_all = T) %>% 
+  pull(name)
 
 emlo_dupes_to_remove = c(emlo_dupes$X1, emlo_dupes$X2,emlo_dupes$X3, emlo_dupes$X4) %>% 
   as_tibble() %>% 
   mutate(value = trimws(value)) %>% 
   filter(!is.na(value)) %>% distinct(value) %>% 
-  filter(! value %in% to_keep) %>% mutate(reason = 'from_emlo_matches')
+  filter(! value %in% to_keep) %>% 
+  mutate(reason = 'from_emlo_matches')
 
 emlo_dupes_to_check = c(emlo_dupes$X1, emlo_dupes$X2,emlo_dupes$X3, emlo_dupes$X4) %>% 
   as_tibble() %>% 
@@ -80,34 +88,22 @@ This lists all letters sent on the same day with the same sender and recipient, 
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 
-possible_dupes = work %>% filter(!emlo_letter_id_number %in%emlo_dupes_to_remove$value ) %>% filter(!emlo_letter_id_number %in% letters_marked_to_delete$emlo_work_letter_id) %>% filter(!emlo_letter_id_number %in% test_cat_letter_ids$emlo_letter_id_number) %>% 
-  filter(standard_gregorian_date>'1590-01-01') %>% 
-  filter(standard_gregorian_date<'1720-01-01') %>%
-  group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
-  add_tally() %>% 
-  filter(n!=1) %>% 
-  filter(n<5) %>% 
-  group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
-  summarise(all_cats = paste0(original_catalogue_name, collapse = ';'), emlo_letter_id_number) %>% 
-  separate(all_cats, into = c('cat1', 'cat2', 'cat3', 'cat4'), sep = ';') %>% 
-  filter(cat1 != cat2) %>%
-  arrange(standard_gregorian_date) %>% ungroup() %>% 
-  distinct(emlo_letter_id_number)%>% mutate(reason = 'auto_duplicate')
+possible_dupes = work %>% 
+  filter(!is.na(year_date)& !is.na(month_date) & !is.na(year_date))%>% 
+  filter(!emlo_letter_id_number %in%emlo_dupes_to_remove$value) %>% filter(!emlo_letter_id_number %in% letters_marked_to_delete$emlo_work_letter_id) %>% filter(!emlo_letter_id_number %in% test_cat_letter_ids$emlo_letter_id_number) %>% 
+  filter(standard_gregorian_date>'1500-01-01') %>% 
+  filter(standard_gregorian_date<'1800-01-01') %>% distinct(emlo_letter_id_number) %>% mutate(reason= 'auto_duplicate')
 
-possible_dupes_distinct_to_remove = work %>% 
-  filter(standard_gregorian_date>'1590-01-01') %>% 
-  filter(standard_gregorian_date<'1720-01-01') %>%
-  filter(!emlo_letter_id_number %in% emlo_dupes_to_remove) %>% 
-  group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
-  add_tally() %>% 
-  filter(n!=1) %>% 
-  filter(n<4) %>% 
-  group_by(standard_gregorian_date, author_emlo_id, recipient_emlo_id) %>% 
-  summarise(all_cats = paste0(original_catalogue_name, collapse = ';'), emlo_letter_id_number) %>% separate(all_cats, into = c('cat1', 'cat2', 'cat3', 'cat4'), sep = ';') %>% 
-  filter(cat1 != cat2) %>%
-  arrange(standard_gregorian_date) %>% 
-  distinct(author_emlo_id, recipient_emlo_id, standard_gregorian_date, .keep_all = T) %>% 
+select_one_to_keep = work %>% 
+  filter(!is.na(year_date)& !is.na(month_date) & !is.na(year_date)) %>% 
+  filter(standard_gregorian_date>'1500-01-01') %>% 
+  filter(standard_gregorian_date<'1800-01-01') %>% 
+  filter(!emlo_letter_id_number %in%emlo_dupes_to_remove$value) %>% filter(!emlo_letter_id_number %in% letters_marked_to_delete$emlo_work_letter_id) %>% filter(!emlo_letter_id_number %in% test_cat_letter_ids$emlo_letter_id_number)  %>% 
+  distinct(standard_gregorian_date, author_emlo_id, recipient_emlo_id, .keep_all = T) %>% 
   pull(emlo_letter_id_number)
+
+possible_dupes = possible_dupes %>% 
+  filter(!emlo_letter_id_number %in% select_one_to_keep)
 
 bcc_poss_dupes = work %>% 
   filter(emlo_letter_id_number %in% possible_dupes) %>% 
@@ -185,8 +181,7 @@ if(!identical(new_to_remove, old_to_remove)){
 Create a version of the work.csv with duplicates (only those I found, not including EMLO recon duplicates) for sorting and checking.
 
 ```{r}
-work %>% 
-  mutate(poss_dupe = ifelse(emlo_letter_id_number %in% emlo_dupes_to_check, 'no', ifelse(emlo_letter_id_number %in% possible_dupes, 'yes', 'no'))) %>% arrange(standard_gregorian_date, author, recipient) %>%  mutate(order = 1:nrow(.)) %>% select(order, everything()) %>%
+work %>%  left_join(new_to_remove, by = c('emlo_letter_id_number' = 'value')) %>%
   write_csv('work_with_poss_dupes.csv', na = '')
 ```
 
